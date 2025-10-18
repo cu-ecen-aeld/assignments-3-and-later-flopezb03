@@ -2,6 +2,8 @@
 
 #include <fcntl.h>
 #include <unistd.h>
+#include <stdlib.h>
+#include <sys/wait.h>
 
 /**
  * @param cmd the command to execute with system()
@@ -113,12 +115,12 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
  *   The rest of the behaviour is same as do_exec()
  *
 */
-    open(outputfile, O_WRONLY | O_CREAT | O_TRUNC);
+    int fd = open(outputfile, O_WRONLY | O_CREAT | O_TRUNC);
 
     pid_t pid = fork();
     if(pid == 0){
         close(STDOUT_FILENO);
-        dup2(outputfile, STDOUT_FILENO);
+        dup2(fd, STDOUT_FILENO);
         execv(command[0], command);
 
     }else if(pid == -1){
@@ -130,7 +132,7 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
         if(WEXITSTATUS(status) != 0)
             return false;
     }
-    close(outputfile);
+    close(fd);
 
     va_end(args);
 
