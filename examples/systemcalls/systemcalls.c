@@ -71,7 +71,7 @@ bool do_exec(int count, ...)
     pid_t pid = fork();
     if(pid == 0){
         execv(command[0], command);
-        return false;
+        exit(1);
 
     }else if(pid == -1){
         return false;
@@ -123,7 +123,7 @@ bool do_exec_redirect(const char *outputfile, int count, ...)
         close(STDOUT_FILENO);
         dup2(fd, STDOUT_FILENO);
         execv(command[0], command);
-        return false;
+        exit(1);
     }else if(pid == -1){
         return false;
     }else{
