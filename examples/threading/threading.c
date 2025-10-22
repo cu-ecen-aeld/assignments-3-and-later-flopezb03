@@ -17,9 +17,12 @@ void* threadfunc(void* thread_param)
 
     struct thread_data* thread_func_args = (struct thread_data *) thread_param;
 
-    nanosleep(thread_func_args->wait_to_obtain_ms*1000000);
+    struct timespec obtain_duration = {0,thread_func_args->wait_to_obtain_ms*1000000};
+    struct timespec release_duration = {0,thread_func_args->wait_to_release_ms*1000000};
+
+    nanosleep(&obtain_duration, NULL);
     pthread_mutex_lock(thread_func_args->mutex);
-    nanosleep(thread_func_args->wait_to_release_ms*1000000);
+    nanosleep(&release_duration,NULL);
     pthread_mutex_unlock(thread_func_args->mutex);
 
     thread_func_args->thread_complete_success = true;
