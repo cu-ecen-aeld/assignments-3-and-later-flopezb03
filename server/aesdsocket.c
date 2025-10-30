@@ -16,7 +16,7 @@
 #define VARFILE_PATH "/var/tmp/aesdsocketdata"
 #define BUFFER_SIZE 1024
 
-int server_fd, client_fd;
+int server_fd = -1, client_fd = -1;
 
 void closeall(){
     if(server_fd != -1)
@@ -46,12 +46,17 @@ void set_sigaction(){
 int socket2file(int client_fd);
 int file2socket(int client_fd);
 
-int main(){
+int main(int argc, char** argv){
     struct addrinfo hints;
     struct addrinfo* server_addrinfo;
     struct sockaddr_in client_sockaddr;
     socklen_t client_addrlen;
     char ip4[INET_ADDRSTRLEN];
+    int daemon_mode = 0;
+
+    // Verify daemon_mode
+    if (argc == 2 && strcmp(argv[1], "-d") == 0)
+        daemon_mode = 1;
 
     // Set sigaction
     set_sigaction();
@@ -66,10 +71,10 @@ int main(){
         exit(EXIT_FAILURE);
     }
 
-    /*
+    
     int optval = 1;
     setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
-    */
+    
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
@@ -83,6 +88,27 @@ int main(){
         closeall();
         freeaddrinfo(server_addrinfo);
         exit(EXIT_FAILURE);
+    }
+    freeaddrinfo(server_addrinfo);
+
+    // Set daemon mode
+    if(daemon_mode){
+        pid_t pid = fork();
+        if(pid < 0){
+            closeall();
+            exit(EXIT_FAILURE);
+        }
+
+        if(pid > 0){
+            closeall();
+            exit(EXIT_SUCCESS);
+        }
+
+        setsid();
+        chdir("/");
+        close(STDIN_FILENO);
+        close(STDOUT_FILENO);
+        close(STDERR_FILENO);
     }
 
     // Listen
