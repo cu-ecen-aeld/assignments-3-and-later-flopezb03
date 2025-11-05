@@ -206,7 +206,7 @@ int main(int argc, char** argv){
         strcpy(new_node->client_ip4, ip4);
         new_node->end = 0;
 
-        if(pthread_create(&new_node->t, NULL, thread_func, new_node) != 0)
+        if(pthread_create(&new_node->t, NULL, thread_func, new_node) == 0)
             SLIST_INSERT_HEAD(&head, new_node, entries);
 
 
