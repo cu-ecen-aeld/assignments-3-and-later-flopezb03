@@ -33,17 +33,18 @@ struct entry {
     SLIST_ENTRY(entry) entries;
 };
 pthread_mutex_t mutex;
+int exit_signal = 0;
 
 void closeall(){
     if(server_fd != -1)
         close(server_fd);
     remove(VARFILE_PATH);
+    pthread_mutex_destroy(&mutex);
     closelog();
 }
 
 void close_signal_handler(){
-    closeall();
-    exit(EXIT_SUCCESS);
+    exit_signal = 1;
 }
 
 void timer_signal_handler(){
@@ -193,7 +194,7 @@ int main(int argc, char** argv){
                 close(node_iterator->client_fd);
                 SLIST_REMOVE(&head, node_iterator, entry, entries);
                 syslog(LOG_INFO, "Closed connection from %s", node_iterator->client_ip4);
-                
+
                 free(node_iterator);
             }
         }
@@ -202,6 +203,8 @@ int main(int argc, char** argv){
         client_addrlen = sizeof(client_sockaddr);
         int new_client_fd = accept(server_fd, (struct sockaddr*)&client_sockaddr, &client_addrlen);
         if(new_client_fd == -1){
+            if (exit_signal) 
+                break;
             continue;
         }
 
@@ -219,10 +222,20 @@ int main(int argc, char** argv){
         if(pthread_create(&new_node->t, NULL, thread_task, new_node) == 0)
             SLIST_INSERT_HEAD(&head, new_node, entries);
 
+    }
 
+    SLIST_FOREACH_SAFE(node_iterator, &head, entries, node_iterator_tmp){
+        pthread_join(node_iterator->t, NULL);
 
+        close(node_iterator->client_fd);
+        SLIST_REMOVE(&head, node_iterator, entry, entries);
+        syslog(LOG_INFO, "Closed connection from %s", node_iterator->client_ip4);
+
+        free(node_iterator);
     }
     closeall();
+    
+    exit(EXIT_SUCCESS);
 }
 
 void* thread_task(void* arg){
