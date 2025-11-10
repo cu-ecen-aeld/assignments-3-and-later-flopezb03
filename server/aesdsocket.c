@@ -276,7 +276,6 @@ void* thread_task(void* arg){
     file2socket(node->client_fd);
     pthread_mutex_unlock(&mutex);
     node->end = 1;
-    pthread_exit(NULL);
 }
 
 int socket2file(int client_fd){
