@@ -1,3 +1,4 @@
+ 
 /**
  * @file aesdchar.c
  * @brief Functions and data related to the AESD char driver implementation
@@ -72,7 +73,61 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     /**
      * TODO: handle write
      */
-    return retval;
+    struct aesd_dev* adev = filp->private_data;
+    struct aesd_buffer_entry def_buff;
+
+
+    if (mutex_lock_interruptible(&adev->lock))
+         return -ERESTARTSYS;
+
+    char* aux_buff = kmalloc(count, GFP_KERNEL);
+    copy_from_user(aux_buff, buf, count);
+
+
+    bool end_command = aux_buff[count-1] == '\n';
+    if(end_command){
+        if(adev->tmp_buff.size){    // Have to concat
+            def_buff.size = adev->tmp_buff.size + count;
+            def_buff.buffptr = kmalloc(def_buff.size, GFP_KERNEL);
+
+            memcpy(def_buff.buffptr, adev->tmp_buff.buffptr, adev->tmp_buff.size);             
+            memcpy(def_buff.buffptr + adev->tmp_buff.size, aux_buff, count);
+
+            kfree(adev->tmp_buff.buffptr);
+            adev->tmp_buff.size = 0;
+
+            kfree(aux_buff);
+        }else{      // Not having to concat
+            def_buff.size = count;
+            def_buff.buffptr = aux_buff;
+        }
+
+        //Insert entry
+        if(adev->cbuffer.full){   // Free memory of last entry before overwriting
+            kfree(adev->cbuffer.entry[adev->cbuffer.in_offs].buffptr);
+        }
+        aesd_circular_buffer_add_entry(&adev->cbuffer, &def_buff);
+    }else{
+        if(adev->tmp_buff.size){    // Have to concat
+            char* tmp_buff2 = kmalloc(adev->tmp_buff.size + count, GFP_KERNEL);
+
+            memcpy(tmp_buff2, adev->tmp_buff.buffptr, adev->tmp_buff.size);
+            memcpy(tmp_buff2 + adev->tmp_buff.size, aux_buff, count);
+
+            kfree(adev->tmp_buff.buffptr);
+            adev->tmp_buff.buffptr = tmp_buff2;
+            adev->tmp_buff.size = adev->tmp_buff.size + count;
+
+            kfree(aux_buff);
+        }else{  // Not having to concat
+            adev->tmp_buff.size = count;
+            adev->tmp_buff.buffptr = aux_buff;
+        }
+
+    }
+
+    mutex_unlock(&adev->lock);
+    return count;
 }
 struct file_operations aesd_fops = {
     .owner =    THIS_MODULE,
