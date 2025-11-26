@@ -15,10 +15,19 @@
 #include <pthread.h>
 #include <time.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 
+#define USE_AESD_CHAR_DEVICE 
 
+#ifndef USE_AESD_CHAR_DEVICE
 #define VARFILE_PATH "/var/tmp/aesdsocketdata"
+#else
+#define VARFILE_PATH "/dev/aesdchar"
+#endif
+
+
+
 #define BUFFER_SIZE 1024
 
 
@@ -96,7 +105,9 @@ int main(int argc, char** argv){
 
 
     // Set timer
+#ifndef USE_AESD_CHAR_DEVICE
     set_timer();
+#endif
 
     // Server starts listen
     listen(server_fd, 1024);
@@ -160,7 +171,9 @@ int main(int argc, char** argv){
 void closeall(){
     if(server_fd != -1)
         close(server_fd);
+#ifndef USE_AESD_CHAR_DEVICE
     remove(VARFILE_PATH);
+#endif
     pthread_mutex_destroy(&mutex);
     closelog();
 }
@@ -281,35 +294,36 @@ void* thread_task(void* arg){
 int socket2file(int client_fd){
     char buffer[BUFFER_SIZE];
     int bytes_read;
-    int var_fd;
+    FILE* var_fd;
 
-    var_fd = open(VARFILE_PATH, O_WRONLY | O_CREAT | O_APPEND, 0640);
-    if(var_fd == -1)
+    var_fd = fopen(VARFILE_PATH, "a");
+    if(!var_fd)
         return 0;
 
     do{
         bytes_read = recv(client_fd, buffer, BUFFER_SIZE, 0);
 
-        write(var_fd, buffer, bytes_read);
+        fwrite(buffer, 1, bytes_read, var_fd);
+        fflush(var_fd);
     }while(buffer[bytes_read-1] != '\n');
 
-    close(var_fd);
+    fclose(var_fd);
     return 1;
 }
 
 int file2socket(int client_fd){
     char buffer[BUFFER_SIZE];
     int size_read;
-    int var_fd;
+    FILE* var_fd;
 
-    var_fd = open(VARFILE_PATH, O_RDONLY, 0440);
-    if(var_fd == -1)
+    var_fd = fopen(VARFILE_PATH, "r");
+    if(!var_fd)
         return 0;
 
-    while((size_read = read(var_fd, buffer, BUFFER_SIZE)) != 0)
+    while((size_read = fread(buffer, 1, BUFFER_SIZE, var_fd)) > 0)
         send(client_fd, buffer, size_read, 0);
 
-    close(var_fd);
+    fclose(var_fd);
     return 1;
 }
 
