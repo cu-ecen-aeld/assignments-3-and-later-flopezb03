@@ -62,7 +62,34 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     /**
      * TODO: handle read
      */
-    return retval;
+    struct aesd_dev* adev = filp->private_data;
+    char* out_buff;
+    int out_size;
+    struct aesd_buffer_entry* aux_entry;
+    size_t aux_offset;
+
+    if (mutex_lock_interruptible(&adev->lock))
+         return -ERESTARTSYS;
+
+    aux_entry = aesd_circular_buffer_find_entry_offset_for_fpos(&adev->cbuffer, *f_pos, &aux_offset);
+    if(aux_entry == NULL){
+        mutex_unlock(&adev->lock);
+        return 0;
+    }
+
+    out_size = aux_entry->size - aux_offset;
+    if(count < out_size)
+        out_size = count;
+    out_buff = kmalloc(out_size, GFP_KERNEL);
+
+    memcpy(out_buff, aux_entry->buffptr + aux_offset, out_size);
+    *f_pos = *f_pos + out_size;
+
+    copy_to_user(buf, out_buff, out_size);
+    //kfree(out_buff);
+
+    mutex_unlock(&adev->lock);
+    return out_size;
 }
 
 ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
