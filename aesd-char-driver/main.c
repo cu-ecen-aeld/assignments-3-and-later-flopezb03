@@ -161,7 +161,7 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 loff_t aesd_llseek(struct file *filp, loff_t off, int whence){
     struct aesd_dev* adev = filp->private_data;
     loff_t new_pos;
-    size_t total_size = 0;
+    loff_t total_size = 0;
     uint8_t i;
 
     if (mutex_lock_interruptible(&adev->lock))
@@ -169,7 +169,7 @@ loff_t aesd_llseek(struct file *filp, loff_t off, int whence){
 
     for(i = adev->cbuffer.out_offs; (i != adev->cbuffer.in_offs) || ((adev->cbuffer.full)&&(total_size == 0)); i = (i+1)%AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED)
         total_size += adev->cbuffer.entry[i].size;
-    
+
 
     switch(whence){
         case SEEK_SET:
@@ -185,7 +185,7 @@ loff_t aesd_llseek(struct file *filp, loff_t off, int whence){
             mutex_unlock(&adev->lock);
             return -EINVAL;
     }
-    if(new_pos < 0 || new_pos >= total_size) {
+    if(new_pos < 0) {
         mutex_unlock(&adev->lock);
         return -EINVAL;
     }
@@ -214,14 +214,14 @@ long aesd_modify_foffset(struct file *filp, uint32_t write_cmd, uint32_t write_c
             current_size += adev->cbuffer.entry[index].size;
     } 
 
-    if(cmd_found == -1 || adev->cbuffer.entry[cmd_found].size >= write_cmd_offset){
+    if(cmd_found == -1 || write_cmd_offset >= adev->cbuffer.entry[cmd_found].size){
         mutex_unlock(&adev->lock);
         return EINVAL;
     }
 
 
     loff_t f_offset = current_size + write_cmd_offset;
-    aesd_llseek(filp, f_offset, SEEK_SET);
+    filp->f_pos = f_offset;
     mutex_unlock(&adev->lock);
 
     return f_offset;
