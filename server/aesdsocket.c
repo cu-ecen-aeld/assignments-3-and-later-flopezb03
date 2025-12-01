@@ -16,6 +16,8 @@
 #include <time.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <sys/ioctl.h>
+#include "../aesd-char-driver/aesd_ioctl.h"
 
 
 #define USE_AESD_CHAR_DEVICE 
@@ -65,8 +67,8 @@ void set_daemon_mode();
 void init_server_socket();
 
 void* thread_task(void* arg);
-int socket2file(int client_fd);
-int file2socket(int client_fd);
+int socket2file(int client_fd, FILE* var_fd);
+int file2socket(int client_fd, FILE* var_fd);
 
 
 
@@ -281,49 +283,57 @@ void init_server_socket(){
     freeaddrinfo(server_addrinfo);
 }
 
+int is_ioctlseekto(const char *str, unsigned int *x, unsigned int *y)
+{
+    const char *prefix = "AESDCHAR_IOCSEEKTO:";
+    size_t len = strlen(prefix);
+
+    if (strncmp(str, prefix, len) != 0)
+        return 0;
+
+    return sscanf(str + len, "%u,%u", x, y) == 2;
+}
+
 void* thread_task(void* arg){
     struct entry* node = arg;
+    FILE* var_fd;
 
     pthread_mutex_lock(&mutex);
-    socket2file(node->client_fd);
-    file2socket(node->client_fd);
+    var_fd = fopen(VARFILE_PATH, "w+");
+    socket2file(node->client_fd, var_fd);
+    file2socket(node->client_fd, var_fd);
+    fclose(var_fd);
     pthread_mutex_unlock(&mutex);
     node->end = 1;
 }
 
-int socket2file(int client_fd){
+int socket2file(int client_fd, FILE* var_fd){
     char buffer[BUFFER_SIZE];
     int bytes_read;
-    FILE* var_fd;
-
-    var_fd = fopen(VARFILE_PATH, "a");
-    if(!var_fd)
-        return 0;
+    //FILE* var_fd;
+    struct aesd_seekto seekto;
 
     do{
         bytes_read = recv(client_fd, buffer, BUFFER_SIZE, 0);
-
-        fwrite(buffer, 1, bytes_read, var_fd);
-        fflush(var_fd);
+        
+        if(is_ioctlseekto(buffer, &seekto.write_cmd, &seekto.write_cmd_offset))
+            ioctl(fileno(var_fd),AESDCHAR_IOCSEEKTO, &seekto);
+        else{
+            fwrite(buffer, 1, bytes_read, var_fd);
+            fflush(var_fd);
+        }
     }while(buffer[bytes_read-1] != '\n');
 
-    fclose(var_fd);
     return 1;
 }
 
-int file2socket(int client_fd){
+int file2socket(int client_fd, FILE* var_fd){
     char buffer[BUFFER_SIZE];
     int size_read;
-    FILE* var_fd;
-
-    var_fd = fopen(VARFILE_PATH, "r");
-    if(!var_fd)
-        return 0;
 
     while((size_read = fread(buffer, 1, BUFFER_SIZE, var_fd)) > 0)
         send(client_fd, buffer, size_read, 0);
 
-    fclose(var_fd);
     return 1;
 }
 
